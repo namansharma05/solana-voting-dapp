@@ -34,9 +34,11 @@ pub struct InitializeTreasury<'info> {
     )]
     pub treasury_token_account: Account<'info, TokenAccount>,
 
+    ///CHECK:This is to receive sol tokens
     #[account(mut, seeds = [b"sol_vault"], bump)]
     pub sol_vault: AccountInfo<'info>,
 
+    ///CHECK:This is going to be the mint authority of x_mint tokens 
     #[account(mut, seeds = [b"mint_authority"], bump)]
     pub mint_authority: AccountInfo<'info>,
 
