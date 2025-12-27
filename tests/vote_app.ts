@@ -14,7 +14,7 @@ const SEEDS = {
   TREASURY_CONFIG: "treasury_config",
   MINT_AUTHORITY: "mint_authority",
   X_MINT: "x_mint",
-
+  VOTER: "voter",
 } as const;
 
 const findPda = (programId:anchor.web3.PublicKey, seeds: (Buffer | Uint8Array)[]):anchor.web3.PublicKey => {
@@ -41,10 +41,13 @@ describe("solana Voting DApp", () => {
   let proposalCreatorWallet = new anchor.web3.Keypair();
   let proposalCreatorTokenAccount: anchor.web3.PublicKey;
 
+  let voterWallet = new anchor.web3.Keypair();
+
   let solVaultPda: anchor.web3.PublicKey;
   let treasuryConfigPda: anchor.web3.PublicKey;
   let mintAuthorityPda: anchor.web3.PublicKey;
   let xMintPda: anchor.web3.PublicKey;
+  let voterPda: anchor.web3.PublicKey;
 
   let treasuryTokenAccount: anchor.web3.PublicKey;
 
@@ -64,8 +67,11 @@ describe("solana Voting DApp", () => {
     
     xMintPda = findPda(program.programId, [anchor.utils.bytes.utf8.encode(SEEDS.X_MINT)]);
     
+    voterPda = findPda(program.programId, [anchor.utils.bytes.utf8.encode(SEEDS.VOTER), voterWallet.publicKey.toBuffer()]);
+
     console.log("Transfering sol tokens....");
     await airDropSol(connection, proposalCreatorWallet.publicKey, 10 * anchor.web3.LAMPORTS_PER_SOL);
+    await airDropSol(connection, voterWallet.publicKey, 10 * anchor.web3.LAMPORTS_PER_SOL);
     console.log("Transfer of SOL successfull");
   })
   
@@ -112,6 +118,15 @@ describe("solana Voting DApp", () => {
   });
 });
 
+  describe("3. Voter", () => {
+    it("3.1 registers voter!", async() => {
+      await program.methods.registerVoter().accounts({
+        authority: voterWallet.publicKey,
+      }).signers([voterWallet]).rpc();
 
+      const voterAccountData = await program.account.voter.fetch(voterPda);
+      expect(voterAccountData.voterId.toBase58()).to.equal(voterWallet.publicKey.toBase58());
+    });
+  });
 });
 

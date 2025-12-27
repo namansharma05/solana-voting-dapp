@@ -61,4 +61,11 @@ pub mod vote_app {
         mint_to(cpi_ctx, token_amount)?;
         Ok(())
     }
+
+    pub fn register_voter(ctx: Context<RegisterVoter>) -> Result<()> {
+        let voter_account = &mut ctx.accounts.voter_account;
+        voter_account.voter_id = ctx.accounts.authority.key();
+
+        Ok(())
+    }
 }
