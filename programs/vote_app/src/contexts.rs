@@ -52,7 +52,7 @@ pub struct InitializeTreasury<'info> {
 #[derive(Accounts)]
 pub struct BuyTokens<'info> {
 
-    #[account(seeds=[b"treasury_config"], bump)]
+    #[account(seeds=[b"treasury_config"], bump, constraint = treasury_config_account.x_mint == x_mint.key(),)]
     pub treasury_config_account: Account<'info, TreasuryConfig>,
 
     ///CHECK:This is to receive SOL tokens
@@ -66,7 +66,7 @@ pub struct BuyTokens<'info> {
     #[account(mut)]
     pub treasury_token_account: Account<'info, TokenAccount>,
 
-    #[account(seeds=[b"x_mint"], bump)]
+    #[account(mut)]
     pub x_mint: Account<'info, Mint>,
 
     #[account(mut, constraint = buyer_token_account.owner == buyer.key(), constraint = buyer_token_account.mint == x_mint.key())]
