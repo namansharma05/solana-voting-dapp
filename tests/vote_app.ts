@@ -15,7 +15,11 @@ const SEEDS = {
   MINT_AUTHORITY: "mint_authority",
   X_MINT: "x_mint",
   VOTER: "voter",
+  PROPOSAL_COUNTER: "proposal_counter",
+  PROPOSAL: "proposal",
 } as const;
+
+const PROPOSAL_ID = 1;
 
 const findPda = (programId:anchor.web3.PublicKey, seeds: (Buffer | Uint8Array)[]):anchor.web3.PublicKey => {
   const [pda, bump] = anchor.web3.PublicKey.findProgramAddressSync(seeds, programId);
@@ -25,6 +29,15 @@ const findPda = (programId:anchor.web3.PublicKey, seeds: (Buffer | Uint8Array)[]
 const airDropSol = async(connection: anchor.web3.Connection, publicKey: anchor.web3.PublicKey, sol: number) => {
   const signature = await connection.requestAirdrop(publicKey, sol);
   await connection.confirmTransaction(signature, "confirmed")
+}
+
+const getBlockTime = async(connection:anchor.web3.Connection): Promise<number> => {
+  const slot = await connection.getSlot();
+  const blockTime = await connection.getBlockTime(slot);
+  if(blockTime === null) {
+    throw new Error("Failed to fetch the block time");
+  }
+  return blockTime;
 }
 
 describe("solana Voting DApp", () => {
@@ -48,8 +61,10 @@ describe("solana Voting DApp", () => {
   let mintAuthorityPda: anchor.web3.PublicKey;
   let xMintPda: anchor.web3.PublicKey;
   let voterPda: anchor.web3.PublicKey;
+  let proposalCounterPda: anchor.web3.PublicKey;
 
   let treasuryTokenAccount: anchor.web3.PublicKey;
+  let proposalPda: anchor.web3.PublicKey;
 
   const createTokenAccounts = async () => {
     console.log("Initilization of token account");
@@ -68,6 +83,10 @@ describe("solana Voting DApp", () => {
     xMintPda = findPda(program.programId, [anchor.utils.bytes.utf8.encode(SEEDS.X_MINT)]);
     
     voterPda = findPda(program.programId, [anchor.utils.bytes.utf8.encode(SEEDS.VOTER), voterWallet.publicKey.toBuffer()]);
+
+    proposalCounterPda = findPda(program.programId, [anchor.utils.bytes.utf8.encode(SEEDS.PROPOSAL_COUNTER)]);
+
+    proposalPda = findPda(program.programId, [anchor.utils.bytes.utf8.encode(SEEDS.PROPOSAL),Buffer.from([PROPOSAL_ID])]);
 
     console.log("Transfering sol tokens....");
     await airDropSol(connection, proposalCreatorWallet.publicKey, 10 * anchor.web3.LAMPORTS_PER_SOL);
@@ -116,7 +135,7 @@ describe("solana Voting DApp", () => {
     const tokenBalanceAfter = (await getAccount(connection, proposalCreatorTokenAccount)).amount;
     expect(tokenBalanceAfter-tokenBalanceBefore).to.equal(BigInt(1000_000_000));
   });
-});
+  });
 
   describe("3. Voter", () => {
     it("3.1 registers voter!", async() => {
@@ -126,6 +145,32 @@ describe("solana Voting DApp", () => {
 
       const voterAccountData = await program.account.voter.fetch(voterPda);
       expect(voterAccountData.voterId.toBase58()).to.equal(voterWallet.publicKey.toBase58());
+    });
+  });
+
+  describe("4. Proposal", async() => {
+    it("4.1 registers proposals!", async() => {
+      const currentBlockTime = await getBlockTime(connection);
+      const deadlineTime = new anchor.BN(currentBlockTime + 10);
+      const proposalInfo = "Build a layer 2 solution";
+      const stakeAmount = new anchor.BN(1000);
+      await program.methods.registerProposal(proposalInfo, deadlineTime, stakeAmount).accounts({
+        authority: proposalCreatorWallet.publicKey,
+        proposalTokenAccount: proposalCreatorTokenAccount,
+        proposalCounterAccount: proposalCounterPda,
+        treasuryTokenAccount: treasuryTokenAccount,
+        xMint: xMintPda,
+      }).signers([proposalCreatorWallet]).rpc();
+
+      const proposalAccountData = await program.account.proposal.fetch(proposalPda);
+      const proposalCounterAccountData = await program.account.proposalCounter.fetch(proposalCounterPda);
+
+      expect(proposalCounterAccountData.proposalCount).to.equal(2);
+      expect(proposalAccountData.authority.toBase58()).to.equal(proposalCreatorWallet.publicKey.toBase58());
+      expect(proposalAccountData.deadline.toString()).to.equal(deadlineTime.toString());
+      expect(proposalAccountData.numberOfVotes).to.equal(0);
+      expect(proposalAccountData.proposalId).to.equal(1);
+      expect(proposalAccountData.proposalInfo).to.equal("Build a layer 2 solution");
     });
   });
 });
