@@ -52,25 +52,26 @@ describe("solana Voting DApp", () => {
   const adminWallet = (provider.wallet as NodeWallet).payer;
 
   let proposalCreatorWallet = new anchor.web3.Keypair();
-  let proposalCreatorTokenAccount: anchor.web3.PublicKey;
-
+  
   let voterWallet = new anchor.web3.Keypair();
-
+  
   let solVaultPda: anchor.web3.PublicKey;
   let treasuryConfigPda: anchor.web3.PublicKey;
   let mintAuthorityPda: anchor.web3.PublicKey;
   let xMintPda: anchor.web3.PublicKey;
   let voterPda: anchor.web3.PublicKey;
   let proposalCounterPda: anchor.web3.PublicKey;
-
-  let treasuryTokenAccount: anchor.web3.PublicKey;
   let proposalPda: anchor.web3.PublicKey;
+  
+  let treasuryTokenAccount: anchor.web3.PublicKey;
+  let proposalCreatorTokenAccount: anchor.web3.PublicKey;
+  let voterTokenAccount: anchor.web3.PublicKey;
 
   const createTokenAccounts = async () => {
     console.log("Initilization of token account");
     treasuryTokenAccount = (await (getOrCreateAssociatedTokenAccount(connection, adminWallet, xMintPda, adminWallet.publicKey))).address;
     proposalCreatorTokenAccount = (await (getOrCreateAssociatedTokenAccount(connection, proposalCreatorWallet, xMintPda, proposalCreatorWallet.publicKey))).address;
-    
+    voterTokenAccount = (await getOrCreateAssociatedTokenAccount(connection, voterWallet, xMintPda, voterWallet.publicKey)).address;
   }
 
   beforeEach(async() => {
@@ -124,17 +125,29 @@ describe("solana Voting DApp", () => {
   })
 
   describe("2. Buy Tokens", () => {
-  it("2.1 buy tokens!", async() => {
-    const tokenBalanceBefore = (await getAccount(connection, proposalCreatorTokenAccount)).amount;
-    await program.methods.buyTokens().accounts({
-      buyer: proposalCreatorWallet.publicKey,
-      treasuryTokenAccount: treasuryTokenAccount,
-      buyerTokenAccount: proposalCreatorTokenAccount,
-      xMint: xMintPda,
-    }).signers([proposalCreatorWallet]).rpc();
-    const tokenBalanceAfter = (await getAccount(connection, proposalCreatorTokenAccount)).amount;
-    expect(tokenBalanceAfter-tokenBalanceBefore).to.equal(BigInt(1000_000_000));
-  });
+    it("2.1 buy tokens for proposal creator!", async() => {
+      const tokenBalanceBefore = (await getAccount(connection, proposalCreatorTokenAccount)).amount;
+      await program.methods.buyTokens().accounts({
+        buyer: proposalCreatorWallet.publicKey,
+        treasuryTokenAccount: treasuryTokenAccount,
+        buyerTokenAccount: proposalCreatorTokenAccount,
+        xMint: xMintPda,
+      }).signers([proposalCreatorWallet]).rpc();
+      const tokenBalanceAfter = (await getAccount(connection, proposalCreatorTokenAccount)).amount;
+      expect(tokenBalanceAfter-tokenBalanceBefore).to.equal(BigInt(1000_000_000));
+    });
+
+    it("2.2 buy tokens for voter!", async() => {
+      const tokenBalanceBefore = (await getAccount(connection, voterTokenAccount)).amount;
+      await program.methods.buyTokens().accounts({
+        buyer: voterWallet.publicKey,
+        treasuryTokenAccount: treasuryTokenAccount,
+        buyerTokenAccount: voterTokenAccount,
+        xMint: xMintPda,
+      }).signers([voterWallet]).rpc();
+      const tokenBalanceAfter = (await getAccount(connection, voterTokenAccount)).amount;
+      expect(tokenBalanceAfter-tokenBalanceBefore).to.equal(BigInt(1000_000_000));
+    });
   });
 
   describe("3. Voter", () => {
@@ -171,6 +184,19 @@ describe("solana Voting DApp", () => {
       expect(proposalAccountData.numberOfVotes).to.equal(0);
       expect(proposalAccountData.proposalId).to.equal(1);
       expect(proposalAccountData.proposalInfo).to.equal("Build a layer 2 solution");
+    });
+  });
+
+  describe("5. Casting Vote", () => {
+    it("5.1 casts Vote!", async() => {
+      const stakeAmount = new anchor.BN(1000);
+      await program.methods.proposalToVote(PROPOSAL_ID, stakeAmount).accounts({
+        authority: voterWallet.publicKey,
+        voterTokenAccount: voterTokenAccount,
+        treasuryTokenAccount: treasuryTokenAccount,
+        xMint: xMintPda,
+      }).signers([voterWallet]).rpc();
+
     });
   });
 });

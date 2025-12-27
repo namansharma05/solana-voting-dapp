@@ -10,4 +10,10 @@ pub enum VoteError {
 
     #[msg("Proposal count overflow")]
     ProposalCountOverflow,
+
+    #[msg("This proposal is already ended")]
+    ProposalEnded,
+
+    #[msg("proposal votes overflown")]
+    ProposalVotesOverflow,
 }

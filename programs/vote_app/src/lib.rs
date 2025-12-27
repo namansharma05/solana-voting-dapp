@@ -116,4 +116,33 @@ pub mod vote_app {
 
         Ok(())
     }
+
+    pub fn proposal_to_vote(ctx: Context<Vote>, proposal_id: u8, token_amount: u64) -> Result<()> {
+        let clock = Clock::get()?;
+        let proposal_account = &mut ctx.accounts.proposal_account;
+        require!(
+            proposal_account.deadline > clock.unix_timestamp,
+            VoteError::ProposalEnded
+        );
+
+        let cpi_account = Transfer {
+            from: ctx.accounts.voter_token_account.to_account_info(),
+            to: ctx.accounts.treasury_token_account.to_account_info(),
+            authority: ctx.accounts.authority.to_account_info(),
+        };
+
+        let cpi_context =
+            CpiContext::new(ctx.accounts.token_program.to_account_info(), cpi_account);
+
+        transfer(cpi_context, token_amount)?;
+        let voter_account = &mut ctx.accounts.voter_account;
+        voter_account.proposal_voted = proposal_id;
+
+        proposal_account.number_of_votes = proposal_account
+            .number_of_votes
+            .checked_add(1)
+            .ok_or(VoteError::ProposalVotesOverflow)?;
+
+        Ok(())
+    }
 }
