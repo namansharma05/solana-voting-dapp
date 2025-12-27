@@ -1,5 +1,7 @@
 use anchor_lang::prelude::*;
 mod contexts;
+mod errors;
+use errors::*;
 mod state;
 use anchor_lang::system_program;
 use contexts::*;
@@ -7,7 +9,7 @@ declare_id!("3dZFVdmBgBW9TzVrji84rehpN3BNqaVv85WS6KDTwn3e");
 
 #[program]
 pub mod vote_app {
-    use anchor_spl::token::{mint_to, MintTo};
+    use anchor_spl::token::{mint_to, transfer, MintTo, Transfer};
 
     use super::*;
 
@@ -22,6 +24,14 @@ pub mod vote_app {
         treasury_config_account.sol_price = sol_price;
         treasury_config_account.x_mint = ctx.accounts.x_mint.key();
         treasury_config_account.tokens_per_purchase = token_per_purchase;
+
+        let proposal_counter_account = &mut ctx.accounts.proposal_counter_account;
+        require!(
+            proposal_counter_account.proposal_count == 0,
+            VoteError::ProposalCountAlreadyInitialized
+        );
+        proposal_counter_account.proposal_count = 1;
+        proposal_counter_account.authority = ctx.accounts.authority.key();
 
         Ok(())
     }
@@ -65,6 +75,44 @@ pub mod vote_app {
     pub fn register_voter(ctx: Context<RegisterVoter>) -> Result<()> {
         let voter_account = &mut ctx.accounts.voter_account;
         voter_account.voter_id = ctx.accounts.authority.key();
+
+        Ok(())
+    }
+
+    pub fn register_proposal(
+        ctx: Context<RegisterProposal>,
+        proposal_info: String,
+        deadline: i64,
+        token_amount: u64,
+    ) -> Result<()> {
+        let clock = Clock::get()?;
+        require!(deadline > clock.unix_timestamp, VoteError::InvalidDeadline);
+
+        let proposal_account = &mut ctx.accounts.proposal_account;
+        // transfer tokens from proposal_token_account to treasury_token_account
+        let cpi_accounts = Transfer {
+            from: ctx.accounts.proposal_token_account.to_account_info(),
+            to: ctx.accounts.treasury_token_account.to_account_info(),
+            authority: ctx.accounts.authority.to_account_info(),
+        };
+
+        let cpi_context =
+            CpiContext::new(ctx.accounts.token_program.to_account_info(), cpi_accounts);
+
+        transfer(cpi_context, token_amount)?;
+
+        proposal_account.authority = ctx.accounts.authority.key();
+        proposal_account.deadline = deadline;
+        proposal_account.proposal_info = proposal_info;
+
+        let proposal_counter_account = &mut ctx.accounts.proposal_counter_account;
+
+        proposal_account.proposal_id = proposal_counter_account.proposal_count;
+
+        proposal_counter_account.proposal_count = proposal_counter_account
+            .proposal_count
+            .checked_add(1)
+            .ok_or(VoteError::ProposalCountOverflow)?;
 
         Ok(())
     }
